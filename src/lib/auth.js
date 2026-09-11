@@ -1,4 +1,5 @@
-import { supabase, getAppMeta } from './supabase'
+import { supabase, getAppMeta, DEMO } from './supabase'
+import { signIn } from './demoData'
 
 // Roles used across the app. Kept in one place so RLS and UI stay consistent.
 export const ROLES = {
@@ -10,12 +11,23 @@ export const ROLES = {
   UNASSIGNED: 'unassigned',
 }
 
+export function isDemo() {
+  return DEMO
+}
+
 export function currentUser() {
   return supabase.auth.getSession()?.data?.session?.user || null
 }
 
 export function isAuthenticated() {
   return Boolean(currentUser())
+}
+
+// Demo-mode login (seeded accounts, email + password). Only used in demo mode.
+export function signInDemo(email, password) {
+  const res = signIn(email, password)
+  if (res.error) return res
+  return { data: { session: res.data.session } }
 }
 
 export function hasRole(role) {

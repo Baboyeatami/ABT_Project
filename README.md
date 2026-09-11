@@ -85,6 +85,28 @@ npm run dev        # frontend at http://localhost:5173
 The Express API runs as Vercel serverless functions. To test `/api` locally you
 can run `vercel dev`.
 
+## Demo mode (no Supabase / Docker)
+
+With `VITE_DEMO_MODE=1` (the default in the generated `.env`), the app runs
+entirely in your browser against a seeded in-memory dataset — no Supabase
+project, Docker, or Google OAuth needed. Seeded login accounts (password
+`demo1234`):
+
+| Email                | Role              |
+|----------------------|-------------------|
+| `instructor@abt.demo`| `platform_admin`  |
+| `owner@abt.demo`     | `owner`           |
+| `frontdesk@abt.demo` | `front_desk`      |
+| `kitchen@abt.demo`   | `kitchen`         |
+| `cashier@abt.demo`   | `cashier`         |
+
+Demo data includes 2 hotels, rooms, a full menu, dining tables, guests,
+reservations, an active stay, orders, an invoice, and a payment. Changes are
+persisted to `localStorage` and reset by clearing site data or setting
+`VITE_DEMO_MODE=0` and restarting.
+
+To switch to real Supabase, set `VITE_DEMO_MODE=0` and fill in the keys.
+
 ## Deploy to Vercel (Hobby)
 
 1. Push this repo to GitHub.
