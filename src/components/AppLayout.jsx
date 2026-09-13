@@ -4,11 +4,22 @@ import { supabase, getAppMeta } from '../lib/supabase'
 import { signOut, isAdmin, canUseHotel, canAccess } from '../lib/auth'
 
 const RESTAURANT_LINKS = [
-  ['/menu', 'Menu', 'menu'],
-  ['/tables', 'Tables', 'tables'],
-  ['/pos', 'Order (POS)', 'pos'],
-  ['/kitchen', 'Kitchen', 'kitchen'],
+  ['/menu', 'Menu', 'bi-list-ul', 'menu'],
+  ['/tables', 'Tables', 'bi-grid-3x3-gap', 'tables'],
+  ['/pos', 'Order (POS)', 'bi-cart3', 'pos'],
+  ['/kitchen', 'Kitchen', 'bi-fire', 'kitchen'],
 ]
+
+function NavItem({ to, label, icon }) {
+  return (
+    <li className="nav-item">
+      <Link className="nav-link" to={to}>
+        <i className={`bi ${icon} me-1`} />
+        {label}
+      </Link>
+    </li>
+  )
+}
 
 export default function AppLayout() {
   const navigate = useNavigate()
@@ -25,10 +36,13 @@ export default function AppLayout() {
 
   return (
     <div className="min-vh-100 d-flex flex-column">
-      <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
+      <nav className="navbar navbar-expand-lg navbar-dark app-nav">
         <div className="container-fluid">
-          <Link className="navbar-brand fw-semibold" to="/">
-            ABT Hotel & Restaurant
+          <Link className="navbar-brand fw-bold" to="/">
+            <i className="bi bi-buildings" />
+            <span className="app-brand" style={{ WebkitTextFillColor: 'unset', color: '#fff' }}>
+              ABT Hotel &amp; Restaurant
+            </span>
           </Link>
           <button
             className="navbar-toggler"
@@ -39,55 +53,41 @@ export default function AppLayout() {
             <span className="navbar-toggler-icon" />
           </button>
           <div className="collapse navbar-collapse" id="mainNav">
-            <ul className="navbar-nav me-auto">
-              <li className="nav-item">
-                <Link className="nav-link" to="/">
-                  Dashboard
-                </Link>
-              </li>
+            <ul className="navbar-nav me-auto gap-1">
+              <NavItem to="/" label="Dashboard" icon="bi-speedometer2" />
               {hotelUser && (
                 <>
                   {canAccess('rooms') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/rooms">
-                        Rooms
-                      </Link>
-                    </li>
+                    <NavItem to="/rooms" label="Rooms" icon="bi-door-open" />
                   )}
                   {canAccess('guests') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/guests">
-                        Guests
-                      </Link>
-                    </li>
+                    <NavItem to="/guests" label="Guests" icon="bi-people" />
                   )}
                   {canAccess('reservations') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/reservations">
-                        Front Desk
-                      </Link>
-                    </li>
+                    <NavItem to="/reservations" label="Front Desk" icon="bi-front" />
                   )}
-                  {RESTAURANT_LINKS.some(([, , m]) => canAccess(m)) && (
+                  {RESTAURANT_LINKS.some(([, , , m]) => canAccess(m)) && (
                     <li className="nav-item dropdown">
                       <button
                         className="nav-link dropdown-toggle"
                         onClick={() => setRestaurantOpen((v) => !v)}
                       >
+                        <i className="bi bi-cup-hot me-1" />
                         Restaurant
                       </button>
                       <ul
                         className={`dropdown-menu ${restaurantOpen ? 'show' : ''}`}
                         style={{ position: 'absolute' }}
                       >
-                        {RESTAURANT_LINKS.filter(([, , m]) => canAccess(m)).map(
-                          ([to, label]) => (
+                        {RESTAURANT_LINKS.filter(([, , , m]) => canAccess(m)).map(
+                          ([to, label, icon]) => (
                             <li key={to}>
                               <Link
                                 className="dropdown-item"
                                 to={to}
                                 onClick={() => setRestaurantOpen(false)}
                               >
+                                <i className={`bi ${icon} me-2`} />
                                 {label}
                               </Link>
                             </li>
@@ -97,36 +97,28 @@ export default function AppLayout() {
                     </li>
                   )}
                   {canAccess('billing') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/billing">
-                        Billing
-                      </Link>
-                    </li>
+                    <NavItem to="/billing" label="Billing" icon="bi-receipt" />
                   )}
                   {canAccess('reports') && (
-                    <li className="nav-item">
-                      <Link className="nav-link" to="/reports">
-                        Reports
-                      </Link>
-                    </li>
+                    <NavItem to="/reports" label="Reports" icon="bi-graph-up" />
                   )}
                 </>
               )}
-              {isAdmin() && (
-                <li className="nav-item">
-                  <Link className="nav-link" to="/admin">
-                    Admin
-                  </Link>
-                </li>
-              )}
+              {isAdmin() && <NavItem to="/admin" label="Admin" icon="bi-shield-lock" />}
             </ul>
             {user && (
               <div className="d-flex align-items-center gap-3">
-                <span className="navbar-text small">
-                  {user.email}
-                  <span className="badge bg-secondary ms-2">{meta.role}</span>
-                </span>
+                <div className="d-flex align-items-center gap-2">
+                  <span className="user-avatar d-inline-flex align-items-center justify-content-center rounded-circle text-white fw-bold">
+                    {user.email.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="d-none d-md-block lh-sm">
+                    <div className="small text-white">{user.email}</div>
+                    <span className="badge text-bg-info">{meta.role}</span>
+                  </div>
+                </div>
                 <button className="btn btn-outline-light btn-sm" onClick={handleSignOut}>
+                  <i className="bi bi-box-arrow-right me-1" />
                   Sign out
                 </button>
               </div>
@@ -140,7 +132,7 @@ export default function AppLayout() {
       </main>
 
       <footer className="text-center text-muted small py-3">
-        ABT Hotel & Restaurant Management — Classroom Platform
+        ABT Hotel &amp; Restaurant Management — Classroom Platform
       </footer>
     </div>
   )

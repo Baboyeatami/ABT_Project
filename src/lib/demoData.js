@@ -21,7 +21,7 @@ export const DEMO_ACCOUNTS = [
 // ---------------------------------------------------------------------------
 // Store (localStorage-backed, falls back to in-memory)
 // ---------------------------------------------------------------------------
-const KEY = 'abt-demo-store'
+const KEY = 'abt-demo-store-v2'
 const hasLS = typeof localStorage !== 'undefined'
 
 function seed() {
@@ -96,12 +96,12 @@ function seed() {
       { id: 'guest-2', hotel_id: 'hotel-1', first_name: 'John', last_name: 'Reyes', email: 'john@example.com', phone: '0918 999 0000', id_type: '', id_number: '', notes: '', created_at: now },
     ],
     reservations: [
-      { id: 'res-1', hotel_id: 'hotel-1', guest_id: 'guest-1', room_id: 'room-101', check_in: '2026-01-15', check_out: '2026-01-18', adults: 1, children: 0, status: 'checked_in', deposit: 500, notes: '', created_at: now },
-      { id: 'res-2', hotel_id: 'hotel-1', guest_id: 'guest-2', room_id: 'room-201', check_in: '2026-01-20', check_out: '2026-01-22', adults: 2, children: 0, status: 'confirmed', deposit: 0, notes: '', created_at: now },
+      { id: 'res-1', hotel_id: 'hotel-1', guest_id: 'guest-1', room_id: 'room-101', check_in: '2026-09-12', check_out: '2026-09-15', adults: 1, children: 0, status: 'checked_in', deposit: 500, notes: '', created_at: now },
+      { id: 'res-2', hotel_id: 'hotel-1', guest_id: 'guest-2', room_id: 'room-201', check_in: '2026-09-18', check_out: '2026-09-21', adults: 2, children: 0, status: 'confirmed', deposit: 0, notes: '', created_at: now },
     ],
     stay_sessions: [
-      { id: 'stay-1', hotel_id: 'hotel-1', reservation_id: 'res-1', guest_id: 'guest-1', room_id: 'room-101', check_in_at: '2026-01-15T12:00:00Z', check_out_at: null, status: 'open', created_at: now },
-      { id: 'stay-2', hotel_id: 'hotel-1', reservation_id: 'res-2', guest_id: 'guest-2', room_id: 'room-201', check_in_at: '2026-01-10T12:00:00Z', check_out_at: '2026-01-12T12:00:00Z', status: 'closed', created_at: now },
+      { id: 'stay-1', hotel_id: 'hotel-1', reservation_id: 'res-1', guest_id: 'guest-1', room_id: 'room-101', check_in_at: '2026-09-12T12:00:00Z', check_out_at: null, status: 'open', created_at: now },
+      { id: 'stay-2', hotel_id: 'hotel-1', reservation_id: 'res-2', guest_id: 'guest-2', room_id: 'room-201', check_in_at: '2026-09-05T12:00:00Z', check_out_at: '2026-09-07T12:00:00Z', status: 'closed', created_at: now },
     ],
     orders: [
       { id: 'ord-1', hotel_id: 'hotel-1', table_id: 'tb-3', stay_session_id: 'stay-1', guest_id: 'guest-1', order_type: 'dine_in', status: 'served', subtotal: 400, tax: 48, total: 448, created_at: now },
@@ -116,7 +116,7 @@ function seed() {
       { id: 'fc-1', hotel_id: 'hotel-1', stay_session_id: 'stay-2', source: 'manual', description: 'Minibar', amount: 350, created_at: now },
     ],
     invoices: [
-      { id: 'inv-1', hotel_id: 'hotel-1', stay_session_id: 'stay-2', invoice_number: 'INV-20260115-0001', subtotal: 5350, tax: 642, discount: 0, total: 5992, amount_paid: 5992, status: 'paid', created_at: now },
+      { id: 'inv-1', hotel_id: 'hotel-1', stay_session_id: 'stay-2', invoice_number: 'INV-20260907-0001', subtotal: 5350, tax: 642, discount: 0, total: 5992, amount_paid: 5992, status: 'paid', created_at: now },
     ],
     payments: [
       { id: 'pay-1', hotel_id: 'hotel-1', invoice_id: 'inv-1', amount: 5992, method: 'cash', reference: null, created_at: now },

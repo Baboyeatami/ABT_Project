@@ -33,18 +33,22 @@ export default function Login() {
   }
 
   return (
-    <div className="container d-flex justify-content-center align-items-center min-vh-100">
-      <div className="card shadow-sm" style={{ maxWidth: 440, width: '100%' }}>
+    <div className="login-wrap d-flex justify-content-center align-items-center p-3">
+      <div className="card login-card" style={{ maxWidth: 440, width: '100%' }}>
+        <div className="login-head">
+          <h1 className="h4 mb-1 fw-bold">
+            <i className="bi bi-buildings me-2" />
+            ABT Hotel &amp; Restaurant
+          </h1>
+          <p className="mb-0 opacity-75 small">Classroom Management Platform</p>
+        </div>
         <div className="card-body p-4">
-          <h1 className="h4 mb-1 fw-semibold">ABT Hotel & Restaurant</h1>
-          <p className="text-muted mb-4">Classroom Management Platform</p>
-
           {isDemo() ? (
             <>
-              <p className="small">
-                <strong>Demo mode</strong> — sign in with any seeded account below.
-                All data is in your browser; no Supabase/Docker required.
-              </p>
+              <div className="alert alert-info small mb-3">
+                <strong>Demo mode</strong> — sign in with any seeded account. All data
+                lives in your browser; no Supabase/Docker required.
+              </div>
               <form onSubmit={handleDemo}>
                 <div className="mb-3">
                   <label className="form-label">Email</label>
@@ -65,7 +69,7 @@ export default function Login() {
                     autoComplete="current-password"
                   />
                 </div>
-                {error && <p className="text-danger small">{error}</p>}
+                {error && <p className="text-danger small mb-2">{error}</p>}
                 <button className="btn btn-primary w-100" type="submit">
                   Sign in
                 </button>
@@ -78,9 +82,13 @@ export default function Login() {
                   <button
                     key={a.email}
                     className="btn btn-outline-secondary btn-sm text-start"
-                    onClick={() => signInDemo(a.email, a.password) && navigate('/', { replace: true })}
+                    onClick={() => {
+                      signInDemo(a.email, a.password)
+                      navigate('/', { replace: true })
+                    }}
                   >
-                    {a.email} <span className="text-muted">— {a.profileId.replace('user-', '')}</span>
+                    <span className="text-muted small me-1">{a.profileId.replace('user-', '')}</span>
+                    {a.email}
                   </button>
                 ))}
               </div>
@@ -94,6 +102,7 @@ export default function Login() {
                 Sign in with your school Google account to access your hotel workspace.
               </p>
               <button className="btn btn-primary w-100" onClick={handleGoogle}>
+                <i className="bi bi-google me-2" />
                 Continue with Google
               </button>
               <p className="text-muted small mt-3 mb-0">
