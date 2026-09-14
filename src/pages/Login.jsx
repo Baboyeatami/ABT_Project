@@ -1,17 +1,28 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { signInWithGoogle, signInDemo, isAuthenticated, isDemo } from '../lib/auth'
+import { signInWithGoogle, signInWithPassword, signInDemo, isAuthenticated, isDemo } from '../lib/auth'
 import { DEMO_ACCOUNTS } from '../lib/demoData'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('owner@abt.demo')
-  const [password, setPassword] = useState('demo1234')
+  const [email, setEmail] = useState(isDemo() ? 'owner@abt.demo' : '')
+  const [password, setPassword] = useState(isDemo() ? 'demo1234' : '')
   const [error, setError] = useState(null)
 
   useEffect(() => {
     if (isAuthenticated()) navigate('/', { replace: true })
   }, [navigate])
+
+  const handlePassword = async (e) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      await signInWithPassword(email.trim(), password)
+      navigate('/', { replace: true })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   const handleGoogle = async () => {
     try {
@@ -98,15 +109,44 @@ export default function Login() {
             </>
           ) : (
             <>
-              <p className="small">
-                Sign in with your school Google account to access your hotel workspace.
-              </p>
-              <button className="btn btn-primary w-100" onClick={handleGoogle}>
+              <form onSubmit={handlePassword}>
+                <div className="mb-3">
+                  <label className="form-label">Email</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Password</label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                </div>
+                {error && <p className="text-danger small mb-2">{error}</p>}
+                <button className="btn btn-primary w-100" type="submit">
+                  Sign in
+                </button>
+              </form>
+
+              <div className="d-flex align-items-center my-3">
+                <hr className="flex-grow-1 my-0" />
+                <span className="small text-muted mx-2">or</span>
+                <hr className="flex-grow-1 my-0" />
+              </div>
+              <button className="btn btn-outline-primary w-100" onClick={handleGoogle}>
                 <i className="bi bi-google me-2" />
                 Continue with Google
               </button>
               <p className="text-muted small mt-3 mb-0">
-                Only accounts from your school domain (@g.cjc.edu.ph) are allowed.
+                Students can sign in with their school Google account (@g.cjc.edu.ph).
               </p>
             </>
           )}
