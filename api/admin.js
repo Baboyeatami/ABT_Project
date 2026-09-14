@@ -46,6 +46,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
       admin.from('invoices').select('total').not('status', 'eq', 'void'),
     ])
 
+    for (const result of [hotels, users, rooms, guests, reservations, invoices]) if (result.error) throw result.error
     const revenue = invoices.data.reduce((sum, i) => sum + Number(i.total || 0), 0)
 
     res.json({
@@ -135,23 +136,15 @@ router.post('/users/:id/assign', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const { hotelId, role } = req.body
-    if (!role) return res.status(400).json({ error: 'role is required' })
+    if (!['owner','front_desk','kitchen','cashier','unassigned'].includes(role) || (role !== 'unassigned' && !hotelId) || id === req.user.id) return res.status(400).json({ error: 'Select a valid student role and hotel' })
 
     const admin = adminClient()
 
-    const { data: profile, error: profileError } = await admin
-      .from('profiles')
-      .update({ hotel_id: hotelId || null, role })
-      .eq('id', id)
-      .select()
-      .single()
-    if (profileError) return res.status(400).json({ error: profileError.message })
-
-    await admin.auth.admin.updateUserById(id, {
+    const { error } = await admin.auth.admin.updateUserById(id, {
       app_metadata: { hotel_id: hotelId || null, role },
     })
-
-    res.json({ profile })
+    if (error) throw error
+    res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -162,14 +155,12 @@ router.post('/users/:id/disable', requireAdmin, async (req, res) => {
   try {
     const admin = adminClient()
     const { id } = req.params
-    await admin
-      .from('profiles')
-      .update({ role: 'disabled', hotel_id: null })
-      .eq('id', id)
-    await admin.auth.admin.updateUserById(id, {
+    if (id === req.user.id) return res.status(400).json({ error: 'Cannot disable yourself' })
+    const { error } = await admin.auth.admin.updateUserById(id, {
+      ban_duration: '876000h',
       app_metadata: { hotel_id: null, role: 'disabled' },
     })
-    await admin.auth.admin.banUser(id)
+    if (error) throw error
     res.json({ ok: true, disabled: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -180,14 +171,11 @@ router.post('/users/:id/enable', requireAdmin, async (req, res) => {
   try {
     const admin = adminClient()
     const { id } = req.params
-    await admin.auth.admin.unbanUser(id)
-    await admin
-      .from('profiles')
-      .update({ role: 'owner' })
-      .eq('id', id)
-    await admin.auth.admin.updateUserById(id, {
-      app_metadata: { role: 'owner' },
+    const { error } = await admin.auth.admin.updateUserById(id, {
+      ban_duration: 'none',
+      app_metadata: { role: 'unassigned', hotel_id: null },
     })
+    if (error) throw error
     res.json({ ok: true, enabled: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

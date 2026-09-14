@@ -24,9 +24,25 @@ if (!DEMO && (!supabaseUrl || !supabaseAnonKey)) {
 
 // Current user's role/hotel id, read from the JWT app_metadata.
 // These are set by the backend (/api) when a profile is provisioned.
+let currentSession = null
+export function getSessionSnapshot() {
+  return DEMO ? demoClient.auth.getSession().data.session : currentSession
+}
+export async function initializeSession() {
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  currentSession = data.session
+}
+export function subscribeSession(listener) {
+  if (DEMO) return () => {}
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    currentSession = session
+    listener()
+  })
+  return () => data.subscription.unsubscribe()
+}
 export function getAppMeta() {
-  const session = supabase.auth.getSession()
-  const claims = session?.data?.session?.user?.app_metadata || {}
+  const claims = getSessionSnapshot()?.user?.app_metadata || {}
   return {
     hotelId: claims.hotel_id || null,
     role: claims.role || 'unassigned',

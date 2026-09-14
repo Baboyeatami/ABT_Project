@@ -41,7 +41,7 @@ export default function Pos() {
         supabase.from('dining_tables').select('*').eq('hotel_id', hotelId).order('table_number'),
         supabase
           .from('stay_sessions')
-          .select('id, rooms(room_number), guests(first_name, last_name)')
+          .select('id, guest_id, rooms(room_number), guests(first_name, last_name)')
           .eq('hotel_id', hotelId)
           .eq('status', 'open'),
       ])

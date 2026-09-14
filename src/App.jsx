@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react'
+import { initializeSession, subscribeSession } from './lib/supabase'
+import { isAdmin } from './lib/auth'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { isAuthenticated, canUseHotel, canAccess } from './lib/auth'
 import AppLayout from './components/AppLayout'
@@ -32,6 +35,16 @@ function Module({ name, children }) {
 }
 
 export default function App() {
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState('')
+  const [, refresh] = useState(0)
+  useEffect(() => {
+    const unsubscribe = subscribeSession(() => refresh(n => n + 1))
+    initializeSession().then(() => setReady(true)).catch(e => setError(e.message))
+    return unsubscribe
+  }, [])
+  if (error) return <div className="alert alert-danger">Unable to restore session: {error}</div>
+  if (!ready) return <div className="p-4" role="status">Restoring session…</div>
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -44,7 +57,7 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="admin" element={isAdmin() ? <Admin /> : <Navigate to="/" replace />} />
         <Route
           path="rooms"
           element={

@@ -4,6 +4,7 @@ import { useHotel } from '../lib/hotel'
 import PageHeader from '../components/PageHeader'
 import Modal from '../components/Modal'
 import BookingCalendar from '../components/BookingCalendar'
+import { operation } from '../lib/operations'
 
 const RES_STATUS = {
   pending: 'secondary',
@@ -46,6 +47,7 @@ export default function Reservations() {
   const [reservations, setReservations] = useState([])
   const [rooms, setRooms] = useState([])
   const [guests, setGuests] = useState([])
+  const [types, setTypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('list')
@@ -60,7 +62,7 @@ export default function Reservations() {
     setLoading(true)
     setError(null)
     try {
-      const [resRes, roomRes, guestRes] = await Promise.all([
+      const [resRes, roomRes, guestRes, typeRes] = await Promise.all([
         supabase
           .from('reservations')
           .select(
@@ -70,10 +72,13 @@ export default function Reservations() {
           .order('check_in', { ascending: true }),
         supabase.from('rooms').select('*').eq('hotel_id', hotelId).order('room_number'),
         supabase.from('guests').select('*').eq('hotel_id', hotelId).order('last_name'),
+        supabase.from('room_types').select('*').eq('hotel_id', hotelId),
       ])
       if (resRes.error) throw resRes.error
       if (roomRes.error) throw roomRes.error
       if (guestRes.error) throw guestRes.error
+      if (typeRes.error) throw typeRes.error
+      setTypes(typeRes.data)
       setReservations(resRes.data)
       setRooms(roomRes.data)
       setGuests(guestRes.data)
@@ -90,6 +95,12 @@ export default function Reservations() {
 
   const save = async () => {
     try {
+      if (!res.room_id || res.check_out <= res.check_in || Number(res.adults)<1 || Number(res.children)<0 || Number(res.deposit)<0) throw new Error('Select a room, valid dates, and valid guest counts/deposit')
+      if (res.guest_mode === 'existing' && !res.guest_id) throw new Error('Select a guest')
+      if (res.guest_mode === 'new' && (!res.new_first.trim() || !res.new_last.trim())) throw new Error('Enter the guest first and last name')
+      const roomType = types.find(t => t.id === rooms.find(r => r.id === res.room_id)?.room_type_id)
+      if (roomType && Number(res.adults)+Number(res.children)>roomType.capacity) throw new Error('Room capacity exceeded')
+      if (reservations.some(r => r.id !== resId && r.room_id === res.room_id && ['pending','confirmed','checked_in'].includes(r.status) && res.check_in < r.check_out && res.check_out > r.check_in)) throw new Error('This room is already booked for these dates')
       let guestId = res.guest_id
       if (res.guest_mode === 'new') {
         const { data, error: gerr } = await supabase
@@ -117,9 +128,11 @@ export default function Reservations() {
         status: res.status || 'pending',
       }
       if (resId) {
-        await supabase.from('reservations').update(payload).eq('id', resId)
+        const { error } = await supabase.from('reservations').update(payload).eq('id', resId)
+        if (error) throw error
       } else {
-        await supabase.from('reservations').insert(payload)
+        const { error } = await supabase.from('reservations').insert(payload)
+        if (error) throw error
       }
       setShow(false)
       load()
@@ -130,15 +143,7 @@ export default function Reservations() {
 
   const checkIn = async (r) => {
     try {
-      await supabase.from('stay_sessions').insert({
-        hotel_id: hotelId,
-        reservation_id: r.id,
-        guest_id: r.guest_id,
-        room_id: r.room_id,
-        status: 'open',
-      })
-      await supabase.from('rooms').update({ status: 'occupied' }).eq('id', r.room_id)
-      await supabase.from('reservations').update({ status: 'checked_in' }).eq('id', r.id)
+      await operation('change_stay', { p_reservation:r.id, p_action:'check_in' })
       load()
     } catch (err) {
       alert(err.message)
@@ -147,13 +152,7 @@ export default function Reservations() {
 
   const checkOut = async (r) => {
     try {
-      await supabase
-        .from('stay_sessions')
-        .update({ status: 'closed', check_out_at: new Date().toISOString() })
-        .eq('reservation_id', r.id)
-        .eq('status', 'open')
-      await supabase.from('rooms').update({ status: 'available' }).eq('id', r.room_id)
-      await supabase.from('reservations').update({ status: 'checked_out' }).eq('id', r.id)
+      await operation('change_stay', { p_reservation:r.id, p_action:'check_out' })
       load()
     } catch (err) {
       alert(err.message)
@@ -161,11 +160,13 @@ export default function Reservations() {
   }
 
   const setStatus = async (r, status) => {
-    await supabase.from('reservations').update({ status }).eq('id', r.id)
-    load()
+    if (['checked_in','checked_out'].includes(r.status) || ['checked_in','checked_out'].includes(status)) { alert('Use the check-in/check-out buttons'); return }
+    const { error } = await supabase.from('reservations').update({ status }).eq('id', r.id)
+    if (error) alert(error.message)
+    else load()
   }
 
-  const availableRooms = rooms.filter((room) => room.status === 'available')
+  const availableRooms = rooms.filter(room => room.status !== 'maintenance' && !reservations.some(r => r.id !== resId && r.room_id === room.id && ['pending','confirmed','checked_in'].includes(r.status) && res.check_in < r.check_out && res.check_out > r.check_in))
 
   const q = query.trim().toLowerCase()
   const filtered = q

@@ -1,4 +1,4 @@
-import { supabase, getAppMeta, DEMO } from './supabase'
+import { supabase, getAppMeta, DEMO, getSessionSnapshot } from './supabase'
 import { signIn } from './demoData'
 
 // Roles used across the app. Kept in one place so RLS and UI stay consistent.
@@ -16,7 +16,7 @@ export function isDemo() {
 }
 
 export function currentUser() {
-  return supabase.auth.getSession()?.data?.session?.user || null
+  return getSessionSnapshot()?.user || null
 }
 
 export function isAuthenticated() {

@@ -230,13 +230,13 @@ function uuid() {
 }
 
 function match(row, filters) {
-  return filters.every(([op, col, val]) => {
+  return filters.every(([op, col, val, operand]) => {
     const v = row[col]
     if (op === 'eq') return v === val
     if (op === 'neq') return v !== val
     if (op === 'in') return Array.isArray(val) && val.includes(v)
     if (op === 'not') {
-      if (val === 'eq') return v !== val
+      if (val === 'eq') return v !== operand
       return true
     }
     return true
@@ -318,7 +318,7 @@ function from(table) {
 
     if (op === 'insert') {
       const inserted = insertRows.map((r) => {
-        const row = { ...r }
+        const row = { created_at: new Date().toISOString(), ...r }
         if (row.id == null) row.id = uuid()
         data[table].push(row)
         return row
@@ -397,6 +397,7 @@ export function signIn(email, password) {
     return { error: { message: 'Invalid email or password' } }
   }
   const profile = getStore().profiles.find((p) => p.id === account.profileId)
+  if (!profile || profile.role === 'disabled') return { error: { message:'Account is disabled' } }
   const user = buildUser(profile)
   session = { user, access_token: 'demo-access-token', refresh_token: 'demo-refresh' }
   return { data: { session } }
@@ -544,6 +545,74 @@ export async function demoAdminApi(path, { method = 'GET', body } = {}) {
   }
 
   throw new Error('Unknown demo API path: ' + path)
+}
+
+export async function demoOperation(name, args) {
+  const data = getStore()
+  const before = JSON.stringify(data)
+  const requireRole = (hotelId, roles) => {
+    const profile = data.profiles.find(p => p.id === session?.user.id)
+    if (!profile || (profile.role !== 'platform_admin' && (profile.hotel_id !== hotelId || !roles.includes(profile.role)))) throw new Error('Not authorized')
+  }
+  const money = value => Math.round(Number(value) * 100) / 100
+  try {
+    let result = null
+    if (name === 'change_stay') {
+      const r = data.reservations.find(r => r.id === args.p_reservation)
+      if (!r) throw new Error('Reservation not found')
+      requireRole(r.hotel_id, ['owner','front_desk'])
+      const room = data.rooms.find(room => room.id === r.room_id && room.hotel_id === r.hotel_id)
+      if (!room) throw new Error('Room not found')
+      if (args.p_action === 'check_in') {
+        if (!['pending','confirmed'].includes(r.status) || room.status !== 'available' || data.stay_sessions.some(s => s.room_id === room.id && s.status === 'open')) throw new Error('Room or reservation is not available for check-in')
+        data.stay_sessions.push({ id: uuid(), hotel_id:r.hotel_id, reservation_id:r.id, guest_id:r.guest_id, room_id:room.id, check_in_at:new Date().toISOString(), status:'open' })
+        room.status='occupied'; r.status='checked_in'
+      } else if (args.p_action === 'check_out') {
+        const stay = data.stay_sessions.find(s => s.reservation_id === r.id && s.status === 'open')
+        if (r.status !== 'checked_in' || !stay) throw new Error('No active stay')
+        stay.status='closed'; stay.check_out_at=new Date().toISOString()
+        room.status='available'; r.status='checked_out'
+      } else throw new Error('Unknown stay action')
+    } else if (name === 'issue_invoice') {
+      const s = data.stay_sessions.find(s => s.id === args.p_stay)
+      if (!s) throw new Error('Stay not found')
+      requireRole(s.hotel_id,['owner','cashier'])
+      result = data.invoices.find(i => i.stay_session_id === s.id && i.status !== 'void')
+      if (!result) {
+        const r = data.reservations.find(r => r.id === s.reservation_id)
+        const room = data.rooms.find(r => r.id === s.room_id)
+        const type = data.room_types.find(t => t.id === room?.room_type_id)
+        const nights = Math.max(1,Math.ceil((new Date(r?.check_out || s.check_out_at || Date.now())-new Date(r?.check_in || s.check_in_at))/86400000))
+        const linked = data.orders.filter(o => o.stay_session_id === s.id && o.status !== 'cancelled')
+        const manual = data.folio_charges.filter(c => c.stay_session_id === s.id && c.source === 'manual')
+        const roomAmount = money(nights * Number(room?.rate ?? type?.base_rate ?? 0))
+        const lines = [{description:`Room (${nights} nights)`,source:'room',amount:roomAmount}, ...linked.map(o => ({description:`Restaurant order ${o.id}`,source:'restaurant',amount:Number(o.subtotal)})), ...manual.map(c => ({description:c.description,source:'manual',amount:Number(c.amount)}))]
+        const subtotal = money(lines.reduce((sum,l) => sum+l.amount,0))
+        const tax = money((roomAmount+manual.reduce((sum,c)=>sum+Number(c.amount),0))*0.12+linked.reduce((sum,o)=>sum+Number(o.tax),0))
+        result = {id:uuid(),hotel_id:s.hotel_id,stay_session_id:s.id,invoice_number:`INV-${uuid()}`,created_at:new Date().toISOString(),line_items:lines,subtotal,tax,discount:0,total:money(subtotal+tax),amount_paid:0,status:'unpaid'}
+        data.invoices.push(result)
+      }
+    } else {
+      const inv = data.invoices.find(i => i.id === args.p_invoice)
+      if (!inv) throw new Error('Invoice not found')
+      requireRole(inv.hotel_id,['owner','cashier'])
+      if (name === 'record_payment') {
+        const amount = Number(args.p_amount)
+        if (!Number.isFinite(amount) || amount<=0 || money(amount)!==amount || amount>money(inv.total-inv.amount_paid) || ['void','paid'].includes(inv.status) || !['cash','card','gcash'].includes(args.p_method)) throw new Error('Invalid payment or amount exceeds balance')
+        data.payments.push({id:uuid(),hotel_id:inv.hotel_id,invoice_id:inv.id,amount,method:args.p_method,reference:args.p_reference,created_at:new Date().toISOString()})
+        inv.amount_paid=money(inv.amount_paid+amount)
+        inv.status=inv.amount_paid===inv.total?'paid':'partially_paid'
+      } else if (name === 'void_invoice') {
+        if (inv.amount_paid>0) throw new Error('Paid invoices require a refund workflow')
+        inv.status='void'
+      } else throw new Error('Unknown operation')
+    }
+    persist()
+    return {data:result,error:null}
+  } catch (error) {
+    store=JSON.parse(before)
+    return {data:null,error}
+  }
 }
 
 export const demoClient = { from, auth, signIn }

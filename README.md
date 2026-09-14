@@ -68,11 +68,11 @@ with an allowed school email gets a blank hotel automatically.
 Copy `.env.example` to `.env` and fill in the values (local dev only):
 
 ```bash
+VITE_DEMO_MODE=0
 VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
-ALLOWED_EMAIL_DOMAINS=g.cjc.edu.ph
 ```
 
 ### 4. Run locally
@@ -110,15 +110,49 @@ To switch to real Supabase, set `VITE_DEMO_MODE=0` and fill in the keys.
 ## Deploy to Vercel (Hobby)
 
 1. Push this repo to GitHub.
-2. In Vercel, import the repo (framework preset: Vite is auto-detected).
-3. Add environment variables:
+2. In Vercel, import the repo (framework preset: Vite is auto-detected;
+   `vercel.json` sets the build and API rewrites).
+3. Add environment variables in Vercel → Settings → Environment Variables:
    - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (frontend)
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ALLOWED_EMAIL_DOMAINS` (server)
-4. Add `g.cjc.edu.ph` to your Supabase auth redirect allow-list for the Vercel
-   URL.
-5. Deploy. The `/api/*` routes are handled by the Express functions.
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server only)
+   - `VITE_DEMO_MODE=0` (never deploy with demo mode on)
+4. In Supabase → Authentication → URL Configuration, add the Vercel URL to
+   **Site URL** and `http://localhost:5173` to **Additional Redirect URLs**.
+5. In Supabase → Authentication → Settings, set **Allowed email domains** to
+   `g.cjc.edu.ph` (domain restriction is enforced in the dashboard, not in code).
+6. Deploy. The `/api/*` routes are handled by the Express serverless function
+   (`api/index.js`).
+
+## Live checklist before class starts
+
+- [ ] `0001_init.sql`, `0003_core_integrity.sql` applied (optionally `0002_seed.sql`)
+- [ ] Instructor email set in `platform_settings.admin_emails`
+- [ ] Google OAuth client ID/secret configured in Supabase (Auth → Providers)
+- [ ] Vercel env vars set; `VITE_DEMO_MODE=0`
+- [ ] Supabase redirect allow-list includes the Vercel URL and localhost
+- [ ] Test: first Google sign-in creates a hotel; instructor panel shows all hotels
+
+> `ALLOWED_EMAIL_DOMAINS` is not used by the application; email-domain
+> restrictions live in the Supabase dashboard and in `platform_settings`.
 
 ## Roadmap
+
+### Core integrity migration
+
+Apply `supabase/migrations/0003_core_integrity.sql` after the existing migrations.
+It adds transactional invoice/payment/check-in operations, immutable invoice line
+snapshots, departmental write policies, protected profile roles, and room booking
+overlap constraints. Existing overlapping reservations or duplicate active
+invoices must be reconciled before this migration can succeed; it runs in a
+transaction and does not delete historical records.
+
+The application requires this migration in real Supabase mode. Local demo mode
+implements equivalent billing and stay operations in the browser. Verify with
+`node --test src/lib/core.test.js`. Database migration execution and Google OAuth
+still require a configured Supabase instance.
+
+Previously issued invoices retain their original totals. The new calculation
+applies to newly issued invoices and does not rewrite historical financial data.
 
 - [x] Foundation: scaffold, schema, RLS, auth, admin API skeleton
 - [x] Identity & instructor panel (assign students/hotels)

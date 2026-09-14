@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { supabase, getAppMeta } from '../lib/supabase'
+import { getSessionSnapshot, getAppMeta } from '../lib/supabase'
 import { signOut, isAdmin, canUseHotel, canAccess } from '../lib/auth'
 
 const RESTAURANT_LINKS = [
@@ -24,7 +24,8 @@ function NavItem({ to, label, icon }) {
 export default function AppLayout() {
   const navigate = useNavigate()
   const [restaurantOpen, setRestaurantOpen] = useState(false)
-  const session = supabase.auth.getSession()?.data?.session
+  const [navOpen, setNavOpen] = useState(false)
+  const session = getSessionSnapshot()
   const user = session?.user
   const meta = getAppMeta()
   const hotelUser = canUseHotel()
@@ -47,12 +48,13 @@ export default function AppLayout() {
           <button
             className="navbar-toggler"
             type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#mainNav"
+            aria-label="Toggle navigation"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen(value => !value)}
           >
             <span className="navbar-toggler-icon" />
           </button>
-          <div className="collapse navbar-collapse" id="mainNav">
+          <div className={`collapse navbar-collapse ${navOpen ? 'show' : ''}`} id="mainNav">
             <ul className="navbar-nav me-auto gap-1">
               <NavItem to="/" label="Dashboard" icon="bi-speedometer2" />
               {hotelUser && (

@@ -96,7 +96,7 @@ export default function Dashboard() {
     ['Guests', counts.guests, '/guests', CARD_META.guests],
     ['Active reservations', counts.open, '/reservations', CARD_META.reservations],
     ['Rooms occupied', counts.occupied, '/rooms', { icon: 'bi-door-closed', color: '#d97706' }],
-  ].filter(([, , , mod]) => canAccess(mod))
+  ].filter(([, , path]) => canAccess(path.slice(1)))
 
   return (
     <div>
