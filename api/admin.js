@@ -33,6 +33,186 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+// ---- Per-hotel performance metrics (instructor monitoring) ----
+const DAY_MS = 24 * 60 * 60 * 1000
+
+async function fetchPerformanceData(admin) {
+  const [rooms, guests, reservations, stays, orders, invoices, payments, folios, hotels, profiles] =
+    await Promise.all([
+      admin.from('rooms').select('hotel_id, status'),
+      admin.from('guests').select('hotel_id, created_at'),
+      admin.from('reservations').select('hotel_id, status, created_at'),
+      admin.from('stay_sessions').select('hotel_id, status, created_at'),
+      admin.from('orders').select('hotel_id, status, total, created_at'),
+      admin.from('invoices').select('hotel_id, status, total, created_at'),
+      admin.from('payments').select('hotel_id, amount, method, created_at'),
+      admin.from('folio_charges').select('hotel_id, created_at'),
+      admin.from('hotels').select('id, name, owner_user_id'),
+      admin.from('profiles').select('id, email, display_name'),
+    ])
+  for (const r of [rooms, guests, reservations, stays, orders, invoices, payments, folios, hotels, profiles]) {
+    if (r.error) throw r.error
+  }
+  return {
+    rooms: rooms.data || [],
+    guests: guests.data || [],
+    reservations: reservations.data || [],
+    stays: stays.data || [],
+    orders: orders.data || [],
+    invoices: invoices.data || [],
+    payments: payments.data || [],
+    folios: folios.data || [],
+    hotels: hotels.data || [],
+    profiles: profiles.data || [],
+  }
+}
+
+function computePerformance(data, days, hotelId = null) {
+  const since = days === 'all' ? null : Date.now() - Number(days) * DAY_MS
+  const inWindow = (iso) => !since || new Date(iso).getTime() >= since
+  const num = (v) => Number(v || 0)
+
+  const perf = new Map()
+  for (const h of data.hotels) {
+    if (hotelId && h.id !== hotelId) continue
+    const owner = data.profiles.find((p) => p.id === h.owner_user_id)
+    perf.set(h.id, {
+      hotel_id: h.id,
+      hotel_name: h.name,
+      owner_email: owner?.email || null,
+      room_count: 0,
+      guest_count: 0,
+      reservation_count: 0,
+      revenue: 0,
+      rooms: { total: 0, occupied: 0, available: 0, maintenance: 0, occupancy_pct: 0 },
+      reservations: { total: 0, pending: 0, confirmed: 0, checked_in: 0, checked_out: 0, cancelled: 0 },
+      stays: { open: 0, closed: 0 },
+      restaurant: { orders: 0, sales: 0, avg_order: 0 },
+      billing: { invoiced: 0, collected: 0, outstanding: 0, collection_pct: 0, by_method: {} },
+      activity: { actions: 0, last_activity: null },
+    })
+  }
+
+  for (const r of data.rooms) {
+    const p = perf.get(r.hotel_id)
+    if (!p) continue
+    p.rooms.total++
+    if (r.status === 'occupied') p.rooms.occupied++
+    else if (r.status === 'maintenance') p.rooms.maintenance++
+    else p.rooms.available++
+  }
+  for (const p of perf.values()) {
+    p.rooms.occupancy_pct = p.rooms.total ? Math.round((p.rooms.occupied / p.rooms.total) * 100) : 0
+    p.room_count = p.rooms.total
+  }
+
+  for (const g of data.guests) {
+    const p = perf.get(g.hotel_id)
+    if (!p) continue
+    p.guest_count++
+  }
+
+  for (const r of data.reservations) {
+    const p = perf.get(r.hotel_id)
+    if (!p) continue
+    if (inWindow(r.created_at)) {
+      p.reservations.total++
+      if (r.status in p.reservations) p.reservations[r.status]++
+      p.reservation_count = p.reservations.total
+    }
+    if (!p.activity.last_activity || r.created_at > p.activity.last_activity) {
+      p.activity.last_activity = r.created_at
+    }
+  }
+
+  for (const s of data.stays) {
+    const p = perf.get(s.hotel_id)
+    if (!p || !inWindow(s.created_at)) continue
+    if (s.status === 'open') p.stays.open++
+    else p.stays.closed++
+  }
+
+  for (const o of data.orders) {
+    const p = perf.get(o.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || o.created_at > p.activity.last_activity) {
+      p.activity.last_activity = o.created_at
+    }
+    if (o.status === 'cancelled' || !inWindow(o.created_at)) continue
+    p.restaurant.orders++
+    p.restaurant.sales += num(o.total)
+  }
+  for (const p of perf.values()) {
+    p.restaurant.avg_order = p.restaurant.orders
+      ? Math.round(p.restaurant.sales / p.restaurant.orders)
+      : 0
+  }
+
+  for (const i of data.invoices) {
+    const p = perf.get(i.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || i.created_at > p.activity.last_activity) {
+      p.activity.last_activity = i.created_at
+    }
+    if (i.status === 'void' || !inWindow(i.created_at)) continue
+    p.billing.invoiced += num(i.total)
+    p.revenue = p.billing.invoiced
+  }
+
+  for (const pay of data.payments) {
+    const p = perf.get(pay.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || pay.created_at > p.activity.last_activity) {
+      p.activity.last_activity = pay.created_at
+    }
+    if (!inWindow(pay.created_at)) continue
+    p.billing.collected += num(pay.amount)
+    p.billing.by_method[pay.method] = (p.billing.by_method[pay.method] || 0) + num(pay.amount)
+  }
+  for (const p of perf.values()) {
+    p.billing.outstanding = Math.max(0, p.billing.invoiced - p.billing.collected)
+    p.billing.collection_pct = p.billing.invoiced
+      ? Math.round((p.billing.collected / p.billing.invoiced) * 100)
+      : 0
+  }
+
+  for (const f of data.folios) {
+    const p = perf.get(f.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || f.created_at > p.activity.last_activity) {
+      p.activity.last_activity = f.created_at
+    }
+  }
+
+  for (const p of perf.values()) {
+    p.activity.actions = [data.reservations, data.stays, data.orders, data.invoices, data.payments, data.folios]
+      .flatMap((rows) => rows)
+      .filter((r) => r.hotel_id === p.hotel_id && inWindow(r.created_at)).length
+  }
+
+  return perf
+}
+
+function buildActivitySeries(data, hotelId, length = 14) {
+  const series = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const buckets = new Map()
+  for (let i = length - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * DAY_MS).toISOString().slice(0, 10)
+    buckets.set(d, 0)
+    series.push({ date: d, count: 0 })
+  }
+  const actionRows = [data.reservations, data.stays, data.orders, data.invoices, data.payments, data.folios]
+    .flatMap((rows) => rows)
+    .filter((r) => r.hotel_id === hotelId)
+  for (const r of actionRows) {
+    const key = (r.created_at || '').slice(0, 10)
+    if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1)
+  }
+  return series.map((s) => ({ ...s, count: buckets.get(s.date) }))
+}
+
 // ---- Aggregate stats across all hotels ----
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
@@ -64,53 +244,39 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 })
 
-// ---- List all hotels with owner email + counts ----
+// ---- List all hotels with owner email + performance summary ----
 router.get('/hotels', requireAdmin, async (req, res) => {
   try {
     const admin = adminClient()
-    const { data: hotels, error } = await admin
-      .from('hotels')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) return res.status(400).json({ error: error.message })
+    const data = await fetchPerformanceData(admin)
+    const perf = computePerformance(data, 'all')
+    res.json({ hotels: [...perf.values()] })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
-    const { data: profiles } = await admin
-      .from('profiles')
-      .select('id, email, display_name')
-    const ownerEmail = new Map(
-      (profiles || []).map((p) => [p.id, p.email || p.display_name]),
-    )
+// ---- Compare performance across all hotels (optionally time-windowed) ----
+router.get('/performance', requireAdmin, async (req, res) => {
+  try {
+    const days = ['7', '30', 'all'].includes(String(req.query.days)) ? String(req.query.days) : 'all'
+    const admin = adminClient()
+    const data = await fetchPerformanceData(admin)
+    res.json({ performance: [...computePerformance(data, days).values()] })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
-    const [rooms, guests, reservations, invoices] = await Promise.all([
-      admin.from('rooms').select('hotel_id'),
-      admin.from('guests').select('hotel_id'),
-      admin.from('reservations').select('hotel_id'),
-      admin.from('invoices').select('hotel_id, total').not('status', 'eq', 'void'),
-    ])
-
-    const countBy = (rows, key) => {
-      const map = {}
-      for (const r of rows || []) map[r[key]] = (map[r[key]] || 0) + 1
-      return map
-    }
-    const revenueBy = {}
-    for (const r of invoices.data || []) {
-      revenueBy[r.hotel_id] = (revenueBy[r.hotel_id] || 0) + Number(r.total || 0)
-    }
-    const roomsBy = countBy(rooms.data, 'hotel_id')
-    const guestsBy = countBy(guests.data, 'hotel_id')
-    const resvBy = countBy(reservations.data, 'hotel_id')
-
-    const enriched = hotels.map((h) => ({
-      ...h,
-      owner_email: ownerEmail.get(h.owner_user_id) || null,
-      room_count: roomsBy[h.id] || 0,
-      guest_count: guestsBy[h.id] || 0,
-      reservation_count: resvBy[h.id] || 0,
-      revenue: revenueBy[h.id] || 0,
-    }))
-
-    res.json({ hotels: enriched })
+// ---- Full performance dashboard for one hotel ----
+router.get('/hotels/:id/performance', requireAdmin, async (req, res) => {
+  try {
+    const days = ['7', '30', 'all'].includes(String(req.query.days)) ? String(req.query.days) : 'all'
+    const admin = adminClient()
+    const data = await fetchPerformanceData(admin)
+    const perf = computePerformance(data, days, req.params.id)
+    if (!perf.has(req.params.id)) return res.status(404).json({ error: 'Hotel not found' })
+    res.json({ performance: perf.get(req.params.id), series: buildActivitySeries(data, req.params.id) })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

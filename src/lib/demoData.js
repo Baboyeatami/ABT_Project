@@ -430,6 +430,156 @@ const countBy = (rows, key) => {
   return m
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function demoPerformance(data, days, hotelId = null) {
+  const since = days === 'all' ? null : Date.now() - Number(days) * DAY_MS
+  const inWindow = (iso) => !since || new Date(iso).getTime() >= since
+  const num = (v) => Number(v || 0)
+
+  const perf = new Map()
+  for (const h of data.hotels) {
+    if (hotelId && h.id !== hotelId) continue
+    const owner = data.profiles.find((p) => p.id === h.owner_user_id)
+    perf.set(h.id, {
+      hotel_id: h.id,
+      hotel_name: h.name,
+      owner_email: owner?.email || null,
+      room_count: 0,
+      guest_count: 0,
+      reservation_count: 0,
+      revenue: 0,
+      rooms: { total: 0, occupied: 0, available: 0, maintenance: 0, occupancy_pct: 0 },
+      reservations: { total: 0, pending: 0, confirmed: 0, checked_in: 0, checked_out: 0, cancelled: 0 },
+      stays: { open: 0, closed: 0 },
+      restaurant: { orders: 0, sales: 0, avg_order: 0 },
+      billing: { invoiced: 0, collected: 0, outstanding: 0, collection_pct: 0, by_method: {} },
+      activity: { actions: 0, last_activity: null },
+    })
+  }
+
+  for (const r of data.rooms) {
+    const p = perf.get(r.hotel_id)
+    if (!p) continue
+    p.rooms.total++
+    if (r.status === 'occupied') p.rooms.occupied++
+    else if (r.status === 'maintenance') p.rooms.maintenance++
+    else p.rooms.available++
+  }
+  for (const p of perf.values()) {
+    p.rooms.occupancy_pct = p.rooms.total ? Math.round((p.rooms.occupied / p.rooms.total) * 100) : 0
+    p.room_count = p.rooms.total
+  }
+
+  for (const g of data.guests) {
+    const p = perf.get(g.hotel_id)
+    if (p) p.guest_count++
+  }
+
+  for (const r of data.reservations) {
+    const p = perf.get(r.hotel_id)
+    if (!p) continue
+    if (inWindow(r.created_at)) {
+      p.reservations.total++
+      if (r.status in p.reservations) p.reservations[r.status]++
+      p.reservation_count = p.reservations.total
+    }
+    if (!p.activity.last_activity || r.created_at > p.activity.last_activity) {
+      p.activity.last_activity = r.created_at
+    }
+  }
+
+  for (const s of data.stay_sessions || []) {
+    const p = perf.get(s.hotel_id)
+    if (!p || !inWindow(s.created_at)) continue
+    if (s.status === 'open') p.stays.open++
+    else p.stays.closed++
+  }
+
+  for (const o of data.orders) {
+    const p = perf.get(o.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || o.created_at > p.activity.last_activity) {
+      p.activity.last_activity = o.created_at
+    }
+    if (o.status === 'cancelled' || !inWindow(o.created_at)) continue
+    p.restaurant.orders++
+    p.restaurant.sales += num(o.total)
+  }
+  for (const p of perf.values()) {
+    p.restaurant.avg_order = p.restaurant.orders ? Math.round(p.restaurant.sales / p.restaurant.orders) : 0
+  }
+
+  for (const i of data.invoices) {
+    const p = perf.get(i.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || i.created_at > p.activity.last_activity) {
+      p.activity.last_activity = i.created_at
+    }
+    if (i.status === 'void' || !inWindow(i.created_at)) continue
+    p.billing.invoiced += num(i.total)
+    p.revenue = p.billing.invoiced
+  }
+
+  for (const pay of data.payments) {
+    const p = perf.get(pay.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || pay.created_at > p.activity.last_activity) {
+      p.activity.last_activity = pay.created_at
+    }
+    if (!inWindow(pay.created_at)) continue
+    p.billing.collected += num(pay.amount)
+    p.billing.by_method[pay.method] = (p.billing.by_method[pay.method] || 0) + num(pay.amount)
+  }
+  for (const p of perf.values()) {
+    p.billing.outstanding = Math.max(0, p.billing.invoiced - p.billing.collected)
+    p.billing.collection_pct = p.billing.invoiced ? Math.round((p.billing.collected / p.billing.invoiced) * 100) : 0
+  }
+
+  for (const f of data.folio_charges || []) {
+    const p = perf.get(f.hotel_id)
+    if (!p) continue
+    if (!p.activity.last_activity || f.created_at > p.activity.last_activity) {
+      p.activity.last_activity = f.created_at
+    }
+  }
+
+  for (const p of perf.values()) {
+    p.activity.actions = [
+      ...(data.reservations || []),
+      ...(data.stay_sessions || []),
+      ...(data.orders || []),
+      ...(data.invoices || []),
+      ...(data.payments || []),
+      ...(data.folio_charges || []),
+    ].filter((r) => r.hotel_id === p.hotel_id && inWindow(r.created_at)).length
+  }
+
+  return perf
+}
+
+function demoActivitySeries(data, hotelId, length = 14) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const buckets = new Map()
+  for (let i = length - 1; i >= 0; i--) {
+    buckets.set(new Date(today.getTime() - i * DAY_MS).toISOString().slice(0, 10), 0)
+  }
+  const actionRows = [
+    ...(data.reservations || []),
+    ...(data.stay_sessions || []),
+    ...(data.orders || []),
+    ...(data.invoices || []),
+    ...(data.payments || []),
+    ...(data.folio_charges || []),
+  ].filter((r) => r.hotel_id === hotelId)
+  for (const r of actionRows) {
+    const key = (r.created_at || '').slice(0, 10)
+    if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1)
+  }
+  return [...buckets.entries()].map(([date, count]) => ({ date, count }))
+}
+
 export async function demoAdminApi(path, { method = 'GET', body } = {}) {
   const data = getStore()
   const matchPath = (pattern) => {
@@ -460,23 +610,35 @@ export async function demoAdminApi(path, { method = 'GET', body } = {}) {
 
   if (path === '/admin/hotels' && method === 'GET') {
     const ownerEmail = new Map(data.profiles.map((p) => [p.id, p.email || p.display_name]))
-    const roomsBy = countBy(data.rooms, 'hotel_id')
-    const guestsBy = countBy(data.guests, 'hotel_id')
-    const resvBy = countBy(data.reservations, 'hotel_id')
-    const revenueBy = {}
-    for (const i of data.invoices.filter((x) => x.status !== 'void')) {
-      revenueBy[i.hotel_id] = (revenueBy[i.hotel_id] || 0) + Number(i.total || 0)
-    }
-    return {
-      hotels: data.hotels.map((h) => ({
+    const perf = demoPerformance(data, 'all')
+    const hotels = data.hotels.map((h) => {
+      const p = perf.get(h.id) || {}
+      return {
         ...h,
+        ...p,
+        hotel_name: h.name,
         owner_email: ownerEmail.get(h.owner_user_id) || null,
-        room_count: roomsBy[h.id] || 0,
-        guest_count: guestsBy[h.id] || 0,
-        reservation_count: resvBy[h.id] || 0,
-        revenue: revenueBy[h.id] || 0,
-      })),
-    }
+        room_count: p.rooms?.total || 0,
+        guest_count: (data.guests.filter((g) => g.hotel_id === h.id)).length,
+        reservation_count: p.reservations?.total || 0,
+        revenue: p.billing?.invoiced || 0,
+      }
+    })
+    return { hotels }
+  }
+
+  if (path.split('?')[0] === '/admin/performance' && method === 'GET') {
+    const days = new URLSearchParams(path.split('?')[1] || '').get('days') || 'all'
+    const perf = demoPerformance(data, days)
+    return { performance: [...perf.values()] }
+  }
+
+  const perfDetail = path.match(/^\/admin\/hotels\/([^/?]+)\/performance/)
+  if (perfDetail && method === 'GET') {
+    const days = new URLSearchParams(path.split('?')[1] || '').get('days') || 'all'
+    const perf = demoPerformance(data, days, perfDetail[1])
+    if (!perf.has(perfDetail[1])) return { error: 'Hotel not found' }
+    return { performance: perf.get(perfDetail[1]), series: demoActivitySeries(data, perfDetail[1]) }
   }
 
   if (path === '/admin/users' && method === 'GET') {
