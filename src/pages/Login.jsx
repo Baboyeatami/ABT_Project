@@ -2,15 +2,25 @@ import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { signInWithGoogle, signInWithPassword, signInDemo, isAuthenticated, isDemo } from '../lib/auth'
 import { DEMO_ACCOUNTS } from '../lib/demoData'
+import { subscribeSession } from '../lib/supabase'
 
 export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState(isDemo() ? 'owner@abt.demo' : '')
   const [password, setPassword] = useState(isDemo() ? 'demo1234' : '')
   const [error, setError] = useState(null)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated()) navigate('/', { replace: true })
+    const redirectAuthenticated = () => {
+      if (isAuthenticated()) navigate('/', { replace: true })
+    }
+    const query = new URLSearchParams(window.location.search)
+    const hash = new URLSearchParams(window.location.hash.slice(1))
+    const callbackError = query.get('error_description') || hash.get('error_description')
+    if (callbackError) setError(callbackError)
+    redirectAuthenticated()
+    return subscribeSession(redirectAuthenticated)
   }, [navigate])
 
   const handlePassword = async (e) => {
@@ -25,10 +35,13 @@ export default function Login() {
   }
 
   const handleGoogle = async () => {
+    setError(null)
+    setGoogleLoading(true)
     try {
       await signInWithGoogle()
     } catch (err) {
-      alert(`Sign-in failed: ${err.message}`)
+      setError(err.message)
+      setGoogleLoading(false)
     }
   }
 
@@ -141,9 +154,9 @@ export default function Login() {
                 <span className="small text-muted mx-2">or</span>
                 <hr className="flex-grow-1 my-0" />
               </div>
-              <button className="btn btn-outline-primary w-100" onClick={handleGoogle}>
+              <button className="btn btn-outline-primary w-100" onClick={handleGoogle} disabled={googleLoading}>
                 <i className="bi bi-google me-2" />
-                Continue with Google
+                {googleLoading ? 'Opening Google…' : 'Continue with Google'}
               </button>
               <p className="text-muted small mt-3 mb-0">
                 Students can sign in with their school Google account (@g.cjc.edu.ph).
