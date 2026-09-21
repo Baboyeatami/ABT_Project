@@ -126,6 +126,7 @@ To switch to real Supabase, set `VITE_DEMO_MODE=0` and fill in the keys.
 ## Live checklist before class starts
 
 - [ ] `0001_init.sql`, `0003_core_integrity.sql` applied (optionally `0002_seed.sql`)
+- [ ] `0004_ai_insights.sql` applied if AI insights are wanted, plus `AI_ENABLED`/`GEMINI_*` env vars
 - [ ] Instructor email set in `platform_settings.admin_emails`
 - [ ] Google OAuth client ID/secret configured in Supabase (Auth → Providers)
 - [ ] Vercel env vars set; `VITE_DEMO_MODE=0`
@@ -134,6 +135,41 @@ To switch to real Supabase, set `VITE_DEMO_MODE=0` and fill in the keys.
 
 > `ALLOWED_EMAIL_DOMAINS` is not used by the application; email-domain
 > restrictions live in the Supabase dashboard and in `platform_settings`.
+
+## AI insights (free-tier)
+
+Hotel owners (and the instructor, per hotel) can generate an AI-assisted
+performance summary from the dashboard or the admin performance modal. The
+feature is on-demand, cached, and rate-limited so it fits inside free tiers:
+
+- Metrics are computed in the database (`ai_hotel_snapshot`); only aggregate
+  numbers are sent to the model — no guest contact details.
+- Results are cached for 15 minutes per hotel + period + data snapshot; cached
+  responses do not consume another model request.
+- Limits enforced in Supabase (`ai_claim_request`): 5 new requests per person
+  per day, 30 per classroom per day, 2 per minute across the platform. All
+  counters persist in `ai_usage` and reset at midnight UTC.
+- When the provider's free quota is exhausted, the UI shows a clear message.
+  There is no automatic paid fallback.
+
+### Enable AI insights
+
+1. Apply `supabase/migrations/0004_ai_insights.sql` (creates the cache/usage
+   tables and the two service-role RPCs; all other roles are revoked).
+2. Create a free API key at https://aistudio.google.com/apikey and pick a
+   model with a free quota in your project (for example a `gemini-…-flash`
+   model). Model availability and quotas can change; verify in AI Studio.
+3. Set environment variables (local `.env` and Vercel):
+
+   ```
+   AI_ENABLED=1
+   GEMINI_API_KEY=your-free-tier-key
+   GEMINI_MODEL=gemini-2.5-flash
+   ```
+
+With `AI_ENABLED` unset (or `0`) the endpoint answers `503` and the UI explains
+that insights are not configured yet. In demo mode the panel shows a clearly
+labeled rule-based sample instead of calling any model.
 
 ## Roadmap
 

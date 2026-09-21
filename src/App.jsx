@@ -22,6 +22,10 @@ function Protected({ children }) {
   return children
 }
 
+function AdminOnly({ children }) {
+  return isAdmin() ? children : <Navigate to="/" replace />
+}
+
 // Pages that require an assigned hotel (owner or staff).
 function HotelOnly({ children }) {
   if (!canUseHotel()) return <Navigate to="/" replace />
@@ -57,7 +61,7 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="admin" element={isAdmin() ? <Admin /> : <Navigate to="/" replace />} />
+        <Route path="admin" element={<AdminOnly><Admin /></AdminOnly>} />
         <Route
           path="rooms"
           element={

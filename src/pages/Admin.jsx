@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
+import InsightsPanel from '../components/InsightsPanel'
 
 const ROLES = ['owner', 'front_desk', 'kitchen', 'cashier']
 
@@ -91,6 +92,7 @@ function PerformanceModal({ hotelId, days, onClose }) {
             <button className="btn-close" onClick={onClose} />
           </div>
           <div className="modal-body">
+            <div className="mb-4"><InsightsPanel hotelId={hotelId} /></div>
             {error && <p className="text-danger">Error: {error}</p>}
             {!error && !perf && <p className="text-muted">Loading…</p>}
             {perf && (

@@ -580,6 +580,37 @@ function demoActivitySeries(data, hotelId, length = 14) {
   return [...buckets.entries()].map(([date, count]) => ({ date, count }))
 }
 
+export async function demoInsights(hotelId, days) {
+  const data = getStore()
+  const hotel = data.hotels.find(h => h.id === hotelId)
+  if (!hotel) throw new Error('Hotel not found')
+  const end = new Date()
+  end.setUTCHours(0, 0, 0, 0)
+  const start = new Date(end)
+  start.setUTCDate(start.getUTCDate() - days + 1)
+  const tomorrow = new Date(end)
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  const rows = table => (data[table] || []).filter(row => row.hotel_id === hotelId)
+  const period = table => rows(table).filter(row => new Date(row.created_at) >= start && new Date(row.created_at) < tomorrow)
+  const sum = (items, field) => items.reduce((total, row) => total + Number(row[field] || 0), 0)
+  const metrics = {
+    currency: hotel.currency || 'PHP', days,
+    period_start: start.toISOString().slice(0, 10), period_end: end.toISOString().slice(0, 10),
+    rooms_total: rows('rooms').length, rooms_occupied: rows('rooms').filter(r => r.status === 'occupied').length,
+    rooms_maintenance: rows('rooms').filter(r => r.status === 'maintenance').length,
+    reservations_created: period('reservations').length,
+    restaurant_sales: sum(period('orders').filter(r => r.status !== 'cancelled'), 'total'),
+    invoiced: sum(period('invoices').filter(r => r.status !== 'void'), 'total'),
+    collected: sum(period('payments'), 'amount'),
+    outstanding: rows('invoices').filter(r => r.status !== 'void').reduce((total, row) => total + Math.max(0, Number(row.total) - Number(row.amount_paid || 0)), 0),
+  }
+  return { demo: true, cached: false, generatedAt: new Date().toISOString(), metrics, insight: {
+    summary: `Your workspace has ${metrics.rooms_occupied} occupied rooms out of ${metrics.rooms_total}. ${metrics.reservations_created} reservations were created during the selected period. Use these figures as a starting point for reviewing your hotel's operations.`,
+    observations: [`${metrics.rooms_maintenance} rooms are currently marked for maintenance.`, metrics.outstanding > 0 ? 'There are outstanding invoice balances to review.' : 'There are no outstanding invoice balances recorded.', 'This snapshot does not establish a trend or explain the causes of performance.'],
+    actions: ['Review upcoming arrivals and confirm room readiness at the front desk.', 'Reconcile guest folios and payments before completing checkout.', 'Discuss the selected period with your instructor and compare it with your operational records.'],
+  } }
+}
+
 export async function demoAdminApi(path, { method = 'GET', body } = {}) {
   const data = getStore()
   const matchPath = (pattern) => {
