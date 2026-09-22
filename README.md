@@ -151,6 +151,9 @@ feature is on-demand, cached, and rate-limited so it fits inside free tiers:
   counters persist in `ai_usage` and reset at midnight UTC.
 - When the provider's free quota is exhausted, the UI shows a clear message.
   There is no automatic paid fallback.
+- Each generated result includes a report preview, a downloadable PDF, and a
+  CSV export of the aggregate metrics, observations, and next steps. PDF
+  generation happens in the browser; no report content is uploaded elsewhere.
 
 ### Enable AI insights
 

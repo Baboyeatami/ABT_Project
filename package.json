@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node --test src/lib/core.test.js api/insights.test.js supabase/ai-insights.test.js",
+    "test": "node --test src/lib/core.test.js src/lib/reportExports.test.js api/insights.test.js supabase/ai-insights.test.js",
     "test:ui": "playwright test",
     "dev": "vite",
     "build": "vite build",
@@ -16,6 +16,8 @@
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.13.1",
     "express": "^4.22.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"

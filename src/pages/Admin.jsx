@@ -92,7 +92,7 @@ function PerformanceModal({ hotelId, days, onClose }) {
             <button className="btn-close" onClick={onClose} />
           </div>
           <div className="modal-body">
-            <div className="mb-4"><InsightsPanel hotelId={hotelId} /></div>
+            <div className="mb-4"><InsightsPanel hotelId={hotelId} hotelName={perf?.hotel_name} /></div>
             {error && <p className="text-danger">Error: {error}</p>}
             {!error && !perf && <p className="text-muted">Loading…</p>}
             {perf && (

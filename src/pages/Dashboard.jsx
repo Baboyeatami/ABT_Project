@@ -71,6 +71,6 @@ export default function Dashboard() {
       </section></div>}
       <div className={canAccess('rooms') ? 'col-xl-4' : 'col-12'}><section className="dashboard-panel"><div className="panel-heading"><div><h2>Keep things moving</h2><p>Your everyday operations, one click away.</p></div></div>{actions.map(([to, label, description, icon]) => <Link className="operations-link" to={to} key={to}><i className={`bi ${icon}`} /><span><strong>{label}</strong><small>{description}</small></span></Link>)}</section></div>
     </div>
-    {role === 'owner' && <InsightsPanel hotelId={hotelId} />}
+    {role === 'owner' && <InsightsPanel hotelId={hotelId} hotelName={hotel.name} />}
   </>
 }
