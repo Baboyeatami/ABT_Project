@@ -164,7 +164,7 @@ feature is on-demand, cached, and rate-limited so it fits inside free tiers:
    ```
    AI_ENABLED=1
    GEMINI_API_KEY=your-free-tier-key
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL=gemini-3.5-flash-lite
    ```
 
 With `AI_ENABLED` unset (or `0`) the endpoint answers `503` and the UI explains

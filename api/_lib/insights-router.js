@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { adminClient } from './_lib/supabase-admin.js'
-import { authorizeInsights, generateInsight, insightKey } from './_lib/ai-insights.js'
+import { adminClient } from './supabase-admin.js'
+import { authorizeInsights, generateInsight, insightKey } from './ai-insights.js'
 
 export function createInsightsRouter({ client = adminClient, generate = generateInsight, config = () => ({ enabled: process.env.AI_ENABLED === '1', key: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL }) } = {}) {
   const router = Router()

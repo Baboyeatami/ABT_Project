@@ -1,6 +1,6 @@
 import express from 'express'
 import adminRouter from './admin.js'
-import insightsRouter from './insights.js'
+import insightsRouter from './_lib/insights-router.js'
 
 const app = express()
 
