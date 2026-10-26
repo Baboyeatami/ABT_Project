@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import express from 'express'
-import { createInsightsRouter } from './_lib/insights-router.js'
-import { generateInsight, insightKey } from './_lib/ai-insights.js'
+import { createInsightsRouter } from './insights-router.js'
+import { generateInsight, insightKey } from './ai-insights.js'
 
 const hotelId = '11111111-1111-4111-8111-111111111111'
 const otherHotel = '22222222-2222-4222-8222-222222222222'

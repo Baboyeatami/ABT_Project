@@ -20,7 +20,7 @@ the instructor is a platform admin.
   Supabase client for an in-browser demo client (`src/lib/demoData.js`).
 - `api/` — Express serverless functions (Vercel). `api/index.js` exports the
   app; rewrites map `/api/(.*)` → it (see `vercel.json`).
-  - `api/admin.js` — platform-admin routes (stats, hotels, user assign/enable/disable).
+  - `api/_lib/admin-router.js` — platform-admin routes (stats, hotels, user assign/enable/disable).
   - `api/_lib/supabase-admin.js` — `adminClient()` service-role Supabase client.
     Reads env lazily inside the function; requires `SUPABASE_URL` +
     `SUPABASE_SERVICE_ROLE_KEY`.
@@ -43,12 +43,12 @@ the instructor is a platform admin.
    `seed-accounts.txt` (local only, git-ignored — never commit or print them).
 3. **Email/password login** — added to `src/pages/Login.jsx` for non-demo mode
    (`signInWithPassword` in `src/lib/auth.js`), alongside Google OAuth button.
-4. **Local dev setup** — `node api/dev.mjs` (API on :3001, loads `.env`) +
+4. **Local dev setup** — `node api/_lib/dev.mjs` (API on :3001, loads `.env`) +
    `npm run dev` (Vite on :5173, proxies `/api`).
 5. **Vercel deploy** — project `abt-hotel-platform`, GitHub connected;
    pushes to `main` auto-deploy. Env vars configured via CLI.
 6. **Security** — `seed-accounts.txt` and `.env*` are git-ignored.
-7. **Hotel performance monitoring** — instructor-facing: `api/admin.js` computes
+7. **Hotel performance monitoring** — instructor-facing: `api/_lib/admin-router.js` computes
    per-hotel metrics (`rooms` occupancy, `reservations` by status, `stays`,
    `restaurant` sales, `billing` collected/outstanding/collection %, `activity`
    last-activity + action counts, optional time window `?days=7|30|all`).

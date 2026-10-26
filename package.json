@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node --test src/lib/core.test.js src/lib/reportExports.test.js api/insights.test.js supabase/ai-insights.test.js",
+    "test": "node --test src/lib/core.test.js src/lib/reportExports.test.js api/_lib/insights.test.js supabase/ai-insights.test.js",
     "test:ui": "playwright test",
     "dev": "vite",
     "build": "vite build",

@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { adminClient } from './_lib/supabase-admin.js'
-import { logAction } from './_lib/audit.js'
+import { adminClient } from './supabase-admin.js'
+import { logAction } from './audit.js'
 
 const router = Router()
 

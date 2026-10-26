@@ -1,6 +1,6 @@
 import express from 'express'
-import adminRouter from './admin.js'
-import logsRouter from './logs.js'
+import adminRouter from './_lib/admin-router.js'
+import logsRouter from './_lib/logs-router.js'
 import insightsRouter from './_lib/insights-router.js'
 
 const app = express()
