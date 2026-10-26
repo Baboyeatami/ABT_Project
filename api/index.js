@@ -1,5 +1,6 @@
 import express from 'express'
 import adminRouter from './admin.js'
+import logsRouter from './logs.js'
 import insightsRouter from './_lib/insights-router.js'
 
 const app = express()
@@ -11,6 +12,7 @@ app.get('/api/health', (req, res) => {
 })
 
 app.use('/api/admin', adminRouter)
+app.use('/api/logs', logsRouter)
 app.use('/api/insights', insightsRouter)
 
 app.use((req, res) => {

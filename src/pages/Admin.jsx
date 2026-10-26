@@ -211,6 +211,14 @@ export default function Admin() {
   const [perfHotelId, setPerfHotelId] = useState(null)
   const [perfLoading, setPerfLoading] = useState(false)
 
+  // Logs tab state
+  const [logs, setLogs] = useState([])
+  const [logsTotal, setLogsTotal] = useState(0)
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [logFilters, setLogFilters] = useState({
+    hotel_id: '', user_id: '', action: '', entity_type: '', from: '', to: '',
+  })
+
   const loadPerformance = useCallback(async (range) => {
     setPerfLoading(true)
     try {
@@ -222,6 +230,27 @@ export default function Admin() {
       setPerfLoading(false)
     }
   }, [])
+
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (logFilters.hotel_id) params.set('hotel_id', logFilters.hotel_id)
+      if (logFilters.user_id) params.set('user_id', logFilters.user_id)
+      if (logFilters.action) params.set('action', logFilters.action)
+      if (logFilters.entity_type) params.set('entity_type', logFilters.entity_type)
+      if (logFilters.from) params.set('from', logFilters.from)
+      if (logFilters.to) params.set('to', logFilters.to)
+      params.set('limit', '100')
+      const d = await api(`/logs?${params.toString()}`)
+      setLogs(d.logs || [])
+      setLogsTotal(d.total || 0)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLogsLoading(false)
+    }
+  }, [logFilters])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -249,6 +278,10 @@ export default function Admin() {
   useEffect(() => {
     if (tab === 'performance') loadPerformance(perfRange)
   }, [tab, perfRange, loadPerformance])
+
+  useEffect(() => {
+    if (tab === 'logs') loadLogs()
+  }, [tab, logFilters, loadLogs])
 
   const sortedPerf = useMemo(() => {
     const rows = perfRows.map(flattenPerf)
@@ -351,7 +384,7 @@ export default function Admin() {
       </div>
 
       <ul className="nav nav-tabs mb-3">
-        {['overview', 'performance', 'hotels', 'students'].map((t) => (
+        {['overview', 'performance', 'hotels', 'students', 'logs'].map((t) => (
           <li className="nav-item" key={t}>
             <button
               className={`nav-link ${tab === t ? 'active' : ''}`}
@@ -585,6 +618,121 @@ export default function Admin() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {tab === 'logs' && (
+        <>
+          <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
+            <div className="d-flex gap-2">
+              <select
+                className="form-select form-select-sm w-auto"
+                value={logFilters.hotel_id}
+                onChange={(e) => setLogFilters({ ...logFilters, hotel_id: e.target.value })}
+              >
+                <option value="">All hotels</option>
+                {hotels.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.hotel_name || h.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="form-select form-select-sm w-auto"
+                value={logFilters.user_id}
+                onChange={(e) => setLogFilters({ ...logFilters, user_id: e.target.value })}
+              >
+                <option value="">All users</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.email}</option>
+                ))}
+              </select>
+              <input
+                className="form-control form-control-sm w-auto"
+                placeholder="Action"
+                value={logFilters.action}
+                onChange={(e) => setLogFilters({ ...logFilters, action: e.target.value })}
+              />
+              <input
+                className="form-control form-control-sm w-auto"
+                placeholder="Entity type"
+                value={logFilters.entity_type}
+                onChange={(e) => setLogFilters({ ...logFilters, entity_type: e.target.value })}
+              />
+              <input
+                className="form-control form-control-sm w-auto"
+                type="date"
+                value={logFilters.from}
+                onChange={(e) => setLogFilters({ ...logFilters, from: e.target.value })}
+              />
+              <input
+                className="form-control form-control-sm w-auto"
+                type="date"
+                value={logFilters.to}
+                onChange={(e) => setLogFilters({ ...logFilters, to: e.target.value })}
+              />
+            </div>
+            <div className="d-flex gap-2">
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => setLogFilters({ hotel_id: '', user_id: '', action: '', entity_type: '', from: '', to: '' })}>
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <p className="small text-muted mb-2">
+            {logsTotal} audit log entr{'y' + (logsTotal === 1 ? '' : 'ies')} &middot;{' '}
+            <span className="text-end fw-semibold">{logs.length} shown</span>
+          </p>
+
+          {logsLoading && <p className="text-muted">Loading logs…</p>}
+
+          {!logsLoading && (
+            <div className="table-responsive">
+              <table className="table table-hover align-middle table-sm">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Entity</th>
+                    <th>Entity ID</th>
+                    <th>Hotel</th>
+                    <th className="text-end">Before</th>
+                    <th className="text-end">After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr key={l.id}>
+                      <td className="text-nowrap small">{l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+                      <td className="fw-semibold">{l.user_email || l.user_id || '—'}</td>
+                      <td className="text-capitalize">{l.action}</td>
+                      <td className="text-nowrap small">{l.entity_type}</td>
+                      <td className="text-nowrap small monospace">{l.entity_id || '—'}</td>
+                      <td className="text-nowrap small">{l.hotel_name || '—'}</td>
+                      <td className="text-end">
+                        <details className="d-inline-block" style={{ maxWidth: '180px' }}>
+                          <summary className="btn btn-link btn-sm p-0 text-truncate">view</summary>
+                          <pre className="small p-2 mb-0 bg-light border rounded">{JSON.stringify(l.before, null, 2)}</pre>
+                        </details>
+                      </td>
+                      <td className="text-end">
+                        <details className="d-inline-block" style={{ maxWidth: '180px' }}>
+                          <summary className="btn btn-link btn-sm p-0 text-truncate">view</summary>
+                          <pre className="small p-2 mb-0 bg-light border rounded">{JSON.stringify(l.after, null, 2)}</pre>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                  {logs.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="text-muted text-center">No activity logs.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {assignUser && (

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { adminClient } from './_lib/supabase-admin.js'
+import { logAction } from './_lib/audit.js'
 
 const router = Router()
 
@@ -305,11 +306,24 @@ router.post('/users/:id/assign', requireAdmin, async (req, res) => {
     if (!['owner','front_desk','kitchen','cashier','unassigned'].includes(role) || (role !== 'unassigned' && !hotelId) || id === req.user.id) return res.status(400).json({ error: 'Select a valid student role and hotel' })
 
     const admin = adminClient()
+    const { data: before } = await admin.from('profiles').select('*').eq('id', id).maybeSingle()
 
     const { error } = await admin.auth.admin.updateUserById(id, {
       app_metadata: { hotel_id: hotelId || null, role },
     })
     if (error) throw error
+
+    const { data: after } = await admin.from('profiles').select('*').eq('id', id).maybeSingle()
+    await logAction(admin, {
+      hotelId: (after || before)?.hotel_id || null,
+      userId: req.user.id,
+      action: 'assign',
+      entityType: 'profiles',
+      entityId: id,
+      before,
+      after,
+      req,
+    })
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -322,11 +336,23 @@ router.post('/users/:id/disable', requireAdmin, async (req, res) => {
     const admin = adminClient()
     const { id } = req.params
     if (id === req.user.id) return res.status(400).json({ error: 'Cannot disable yourself' })
+    const { data: before } = await admin.from('profiles').select('*').eq('id', id).maybeSingle()
     const { error } = await admin.auth.admin.updateUserById(id, {
       ban_duration: '876000h',
       app_metadata: { hotel_id: null, role: 'disabled' },
     })
     if (error) throw error
+    const { data: after } = await admin.from('profiles').select('*').eq('id', id).maybeSingle()
+    await logAction(admin, {
+      hotelId: before?.hotel_id || null,
+      userId: req.user.id,
+      action: 'disable',
+      entityType: 'profiles',
+      entityId: id,
+      before,
+      after,
+      req,
+    })
     res.json({ ok: true, disabled: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -342,6 +368,17 @@ router.post('/users/:id/enable', requireAdmin, async (req, res) => {
       app_metadata: { role: 'unassigned', hotel_id: null },
     })
     if (error) throw error
+    const { data: after } = await admin.from('profiles').select('*').eq('id', id).maybeSingle()
+    await logAction(admin, {
+      hotelId: after?.hotel_id || null,
+      userId: req.user.id,
+      action: 'enable',
+      entityType: 'profiles',
+      entityId: id,
+      before: null,
+      after,
+      req,
+    })
     res.json({ ok: true, enabled: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -361,6 +398,17 @@ router.post('/hotels', requireAdmin, async (req, res) => {
       .select()
       .single()
     if (error) return res.status(400).json({ error: error.message })
+
+    await logAction(admin, {
+      hotelId: hotel.id,
+      userId: req.user.id,
+      action: 'create',
+      entityType: 'hotels',
+      entityId: hotel.id,
+      before: null,
+      after: hotel,
+      req,
+    })
 
     if (ownerUserId) {
       await admin
@@ -385,6 +433,7 @@ router.post('/hotels/:id/name', requireAdmin, async (req, res) => {
     const { id } = req.params
     const { name } = req.body
     if (!name) return res.status(400).json({ error: 'name is required' })
+    const { data: before } = await admin.from('hotels').select('*').eq('id', id).maybeSingle()
     const { data, error } = await admin
       .from('hotels')
       .update({ name })
@@ -392,6 +441,16 @@ router.post('/hotels/:id/name', requireAdmin, async (req, res) => {
       .select()
       .single()
     if (error) return res.status(400).json({ error: error.message })
+    await logAction(admin, {
+      hotelId: id,
+      userId: req.user.id,
+      action: 'update',
+      entityType: 'hotels',
+      entityId: id,
+      before,
+      after: data,
+      req,
+    })
     res.json({ hotel: data })
   } catch (err) {
     res.status(500).json({ error: err.message })

@@ -121,6 +121,7 @@ function seed() {
     payments: [
       { id: 'pay-1', hotel_id: 'hotel-1', invoice_id: 'inv-1', amount: 5992, method: 'cash', reference: null, created_at: now },
     ],
+    activityLogs: [],
   }
 }
 
@@ -227,6 +228,25 @@ function embed(row, table, children) {
 function uuid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+function demoLogAction({ hotelId, userId, action, entityType, entityId, before, after }) {
+  const data = getStore()
+  if (!data.activityLogs) data.activityLogs = []
+  data.activityLogs.push({
+    id: uuid(),
+    hotel_id: hotelId || null,
+    user_id: userId || null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId || null,
+    before: before ? JSON.parse(JSON.stringify(before)) : null,
+    after: after ? JSON.parse(JSON.stringify(after)) : null,
+    ip: null,
+    user_agent: null,
+    created_at: new Date().toISOString(),
+  })
+  persist()
 }
 
 function match(row, filters) {
@@ -679,30 +699,61 @@ export async function demoAdminApi(path, { method = 'GET', body } = {}) {
   const assignParams = matchPath('/admin/users/:id/assign')
   if (assignParams && method === 'POST') {
     const p = data.profiles.find((x) => x.id === assignParams.id)
+    const before = p ? { ...p } : null
     if (p) {
       p.hotel_id = body.hotelId || null
       p.role = body.role
     }
     persist()
+    demoLogAction({
+      hotelId: p ? p.hotel_id : null,
+      userId: session?.user.id || null,
+      action: 'assign',
+      entityType: 'profiles',
+      entityId: assignParams.id,
+      before,
+      after: p || null,
+    })
     return { profile: p }
   }
 
   const disableParams = matchPath('/admin/users/:id/disable')
   if (disableParams && method === 'POST') {
     const p = data.profiles.find((x) => x.id === disableParams.id)
+    const before = p ? { ...p } : null
+    const hotelId = p ? p.hotel_id : null
     if (p) {
       p.role = 'disabled'
       p.hotel_id = null
     }
     persist()
+    demoLogAction({
+      hotelId,
+      userId: session?.user.id || null,
+      action: 'disable',
+      entityType: 'profiles',
+      entityId: disableParams.id,
+      before,
+      after: p || null,
+    })
     return { ok: true, disabled: true }
   }
 
   const enableParams = matchPath('/admin/users/:id/enable')
   if (enableParams && method === 'POST') {
     const p = data.profiles.find((x) => x.id === enableParams.id)
+    const before = p ? { ...p } : null
     if (p) p.role = 'owner'
     persist()
+    demoLogAction({
+      hotelId: p ? p.hotel_id : null,
+      userId: session?.user.id || null,
+      action: 'enable',
+      entityType: 'profiles',
+      entityId: enableParams.id,
+      before,
+      after: p || null,
+    })
     return { ok: true, enabled: true }
   }
 
@@ -726,15 +777,70 @@ export async function demoAdminApi(path, { method = 'GET', body } = {}) {
       }
     }
     persist()
+    demoLogAction({
+      hotelId: hotel.id,
+      userId: session?.user.id || null,
+      action: 'create',
+      entityType: 'hotels',
+      entityId: hotel.id,
+      before: null,
+      after: hotel,
+    })
     return { hotel }
   }
 
   const nameParams = matchPath('/admin/hotels/:id/name')
   if (nameParams && method === 'POST') {
     const h = data.hotels.find((x) => x.id === nameParams.id)
+    const before = h ? { ...h } : null
     if (h) h.name = body.name
     persist()
+    demoLogAction({
+      hotelId: nameParams.id,
+      userId: session?.user.id || null,
+      action: 'update',
+      entityType: 'hotels',
+      entityId: nameParams.id,
+      before,
+      after: h || null,
+    })
     return { hotel: h }
+  }
+
+  if (path.split('?')[0] === '/logs' && method === 'GET') {
+    const data = getStore()
+    const params = new URLSearchParams(path.split('?')[1] || '')
+    const hotel_id = params.get('hotel_id') || undefined
+    const user_id = params.get('user_id') || undefined
+    const action = params.get('action') || undefined
+    const entity_type = params.get('entity_type') || undefined
+    const from = params.get('from') || undefined
+    const to = params.get('to') || undefined
+
+    let logs = [...(data.activityLogs || [])]
+    if (hotel_id) logs = logs.filter((l) => l.hotel_id === hotel_id)
+    if (user_id) logs = logs.filter((l) => l.user_id === user_id)
+    if (action) logs = logs.filter((l) => l.action === action)
+    if (entity_type) logs = logs.filter((l) => l.entity_type === entity_type)
+    if (from) logs = logs.filter((l) => l.created_at >= from)
+    if (to) logs = logs.filter((l) => l.created_at <= to)
+
+    logs.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    const total = logs.length
+    const page = Number(params.get('limit')) || 100
+    const offset = Number(params.get('offset')) || 0
+    logs = logs.slice(offset, offset + page)
+
+    // Enrich with user email + hotel name
+    const emailById = new Map(data.profiles.map((p) => [p.id, p.email]))
+    const nameById = new Map(data.hotels.map((h) => [h.id, h.name]))
+    logs = logs.map((l) => ({
+      ...l,
+      user_email: emailById.get(l.user_id) || null,
+      hotel_name: nameById.get(l.hotel_id) || null,
+    }))
+
+    return { logs, total }
   }
 
   throw new Error('Unknown demo API path: ' + path)
@@ -799,6 +905,41 @@ export async function demoOperation(name, args) {
         if (inv.amount_paid>0) throw new Error('Paid invoices require a refund workflow')
         inv.status='void'
       } else throw new Error('Unknown operation')
+    }
+
+    const actor = session?.user.id || null
+    if (name === 'change_stay') {
+      const r = data.reservations.find(x => x.id === args.p_reservation)
+      demoLogAction({
+        hotelId: r?.hotel_id || null,
+        userId: actor,
+        action: args.p_action,
+        entityType: 'reservations',
+        entityId: args.p_reservation,
+        before: null,
+        after: r || null,
+      })
+    } else if (name === 'issue_invoice') {
+      demoLogAction({
+        hotelId: result?.hotel_id || null,
+        userId: actor,
+        action: 'create',
+        entityType: 'invoices',
+        entityId: result?.id || null,
+        before: null,
+        after: result || null,
+      })
+    } else if (name === 'record_payment' || name === 'void_invoice') {
+      const inv = data.invoices.find(x => x.id === args.p_invoice)
+      demoLogAction({
+        hotelId: inv?.hotel_id || null,
+        userId: actor,
+        action: name === 'record_payment' ? 'create' : 'void',
+        entityType: name === 'record_payment' ? 'payments' : 'invoices',
+        entityId: args.p_invoice,
+        before: null,
+        after: inv || null,
+      })
     }
     persist()
     return {data:result,error:null}
